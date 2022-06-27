@@ -1,69 +1,66 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <errno.h>
 #include <pthread.h>
-#include <semaphore.h>
 
+int sumOfNums(int num);
+void* SumOfNumsInFile(void *arg);
 
-void *routine(void *arg)
+int main(int argc,char** argv)
 {
-    char *filename = (char *)arg;
-    int *result = malloc(sizeof(int));
-    *result = 0;
-
-    FILE *fp = fopen(filename, "rb");
-    if (!fp)
+    pthread_t *th = malloc(sizeof(pthread_t) * (argc - 1));
+    for(int i=0;i<argc-1;i++)
     {
-        printf("%s", filename);
-        fflush(stdout);
-        perror(" - ");
+        pthread_create(&th[i],NULL,SumOfNumsInFile,argv[i+1]);
     }
-    else
+    int sum = 0;
+    int *num;
+    
+    for(int i=0;i<argc - 1;i++)
     {
-        int arr[100];
-        int n = fread(&arr, sizeof(int), 100, fp);
-
-        for (int i = 0; i < n; i++)
+        pthread_join(th[i],(void*)num);
+        if(*num != -1)
         {
-            *result += arr[i];
+            sum += *num;
         }
-
-        fclose(fp);
     }
-    return (void *)result;
+    
+    fprintf(stdout,"From all:%d\n",sum);
+    free(th);
+    return 0;
 }
 
-int main(int argc, char *argv[])
+void* SumOfNumsInFile(void *arg)
 {
-    int N = argc - 1;
-
-    pthread_t threads[N];
-
-    for (int i = 0; i < N; i++)
+    int i = 0;
+    int num;
+    int *sum = malloc(sizeof(int));
+    *sum = 0;
+    FILE *f;
+    f = fopen((char*)arg,"r");
+    if(f == NULL)
     {
-
-        if (pthread_create(threads + i, NULL, routine, argv[i + 1]) != 0)
-        {
-            perror("Error creating thread");
-            return 1;
-        }
+        perror((char*)arg);
+        *sum = -1;
+        return (void*)sum;
     }
-
-    int totalSum = 0;
-    for (int i = 0; i < N; i++)
+    while(fscanf(f,"%d",&num) != EOF)
     {
-        int *result;
-        if (pthread_join(threads[i], (void*)&result) != 0)
-        {
-            perror("Error joining thread");
-            return 1;
-        }
-        totalSum += *result;
-        free(result);
+        *sum += sumOfNums(num);
     }
-
-    printf("%d\n", totalSum);
-
-    return 0;
+    fclose(f);
+    fprintf(stdout,"%s - %d\n",(char*)arg,*sum);
+    return (void*)sum;
+}
+int sumOfNums(int num)
+{
+    int sum = 0;
+    while(num != 0)
+    {
+        sum += num%10;
+        num /= 10;
+    }
+    return sum;
 }
